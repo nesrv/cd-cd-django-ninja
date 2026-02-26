@@ -1,3 +1,6 @@
-from django.shortcuts import render
+from django.http import JsonResponse
+from .models import VideoCard
 
-# Create your views here.
+def products_django(request):
+    data = list(VideoCard.objects.values("id", "name", "price", "description"))
+    return JsonResponse({"products": data})
