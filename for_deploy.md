@@ -185,33 +185,59 @@ command: >
 
 Django Ninja нативно поддерживает async — uvicorn обрабатывает множество соединений в одном процессе без блокировки.
 
-### 2. Добавить пул соединений к PostgreSQL
+### 2. Первый результат uvicorn (с ошибкой conn_max_age=600):
 
-Установить `django-pgconnpool` или использовать встроенный `CONN_MAX_AGE` в `settings.py`:
+```
+wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
 
-```python
-DATABASES = {
-    'default': {
-        ...
-        'CONN_MAX_AGE': 600,  # держать соединение 10 минут
-    }
-}
+  4 threads and 200 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.53s   276.58ms   2.00s    70.64%
+    Req/Sec    20.06     15.95   110.00     78.83%
+  1837 requests in 33.19s, 1.21MB read
+  Socket errors: connect 0, read 0, write 0, timeout 1418
+  Non-2xx or 3xx responses: 1415
+Requests/sec:     55.34
 ```
 
-Или через `dj-database-url`:
+**Проблема:** 1415 запросов вернули ошибку 500:
+```
+FATAL: sorry, too many clients already
+```
+
+`conn_max_age=600` с async-воркерами держит соединения открытыми — каждый async-поток
+создаёт соединение и не отпускает его 10 минут. PostgreSQL (по умолчанию 100 соединений)
+быстро исчерпывается.
+
+### 3. Исправление: conn_max_age=0 + max_connections
+
+В `settings.py`:
 ```python
 DATABASES = {
     'default': dj_database_url.config(
         default='postgresql://postgres:postgres@localhost:5432/shop',
-        conn_max_age=600,
+        conn_max_age=0,  # закрывать соединение сразу после запроса
     )
 }
 ```
 
-### 3. Ожидаемый результат
+В `docker-compose.prod.yml` — увеличить лимит PostgreSQL:
+```yaml
+db:
+  image: postgres:17
+  command: postgres -c max_connections=300
+```
 
-| Метрика        | До        | После (ожидание) |
-|---------------|-----------|-------------------|
-| Req/sec       | 50        | 250–500+          |
-| Avg Latency   | 1.06s     | 100–400ms         |
-| Timeouts      | 1531      | 0                 |
+**Почему `conn_max_age=0` для async:**
+- Gunicorn (sync) — `conn_max_age=600` работает, т.к. 1 поток = 1 соединение
+- Uvicorn (async) — пул потоков создаёт много соединений параллельно,
+  `conn_max_age=600` не даёт их закрыть → переполнение
+
+### 4. Ожидаемый результат
+
+| Метрика        | Gunicorn (до) | Uvicorn (ожидание) |
+|---------------|---------------|---------------------|
+| Req/sec       | 33–50         | 250–500+            |
+| Avg Latency   | 1–3s          | 100–400ms           |
+| Timeouts      | 1531          | 0                   |
+| Errors        | 0             | 0                   |
