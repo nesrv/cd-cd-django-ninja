@@ -6,7 +6,7 @@
 git push → GitHub Actions → SSH на VPS (deploy user) → git pull → docker compose up
 ```
 
-Пушишь в `main` — через ~30 сек новая версия уже на сервере.
+Пушишь в `master` — через ~30 сек новая версия уже на сервере.
 
 ---
 
@@ -49,11 +49,11 @@ docker compose -f docker-compose.prod.yml up --build -d
 
 ### Проверить:
 ```bash
-curl http://localhost/api/health
+curl http://localhost:8080/api/health
 # {"status": "ok"}
 ```
 
-Сайт доступен по адресу: `http://81.90.182.174`
+Сайт доступен по адресу: `http://81.90.182.174:8080`
 
 ---
 
@@ -75,7 +75,7 @@ curl http://localhost/api/health
 
 После настройки — всё автоматически:
 
-1. Делаешь `git push origin main`
+1. Делаешь `git push origin master`
 2. GitHub Actions подключается к VPS по SSH
 3. Выполняет `git pull` + `docker compose up --build -d`
 4. Новая версия запущена
@@ -112,7 +112,7 @@ docker compose -f docker-compose.prod.yml exec db psql -U postgres shop
 
 ```
 docker-compose.yml        ← для локальной разработки (порт 8000)
-docker-compose.prod.yml   ← для VPS (порт 80)
+docker-compose.prod.yml   ← для VPS (порт 8080)
 Dockerfile                ← сборка Django-приложения
 .github/workflows/deploy.yml  ← CI/CD pipeline
 ```
@@ -122,7 +122,7 @@ Dockerfile                ← сборка Django-приложения
 ## Бенчмарки
 
 ```bash
-ab -n 10000 -c 100 http://81.90.182.174/api/products
-wrk -t4 -c200 -d30s http://81.90.182.174/api/products
-wrk -t4 -c200 -d30s http://81.90.182.174/api/health
+ab -n 10000 -c 100 http://81.90.182.174:8080/api/products
+wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
+wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/health
 ```
