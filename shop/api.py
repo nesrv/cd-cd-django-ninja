@@ -1,7 +1,5 @@
 from ninja import NinjaAPI, Schema
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
-from django.template.loader import render_to_string
 from .models import VideoCard
 
 api = NinjaAPI(urls_namespace="api")
@@ -27,15 +25,3 @@ def get_product(request, product_id: int):
 @api.get("/health")
 def health(request):
     return {"status": "ok"}
-
-
-@api.get("/products-html", response={200: None})
-def list_products_html(request):
-    products = VideoCard.objects.all()
-    if not products.exists():
-        return HttpResponse("<p>Нет товаров</p>")
-    html = "".join(
-        render_to_string("shop/components/product_card.html", {"product": p})
-        for p in products
-    )
-    return HttpResponse(html)

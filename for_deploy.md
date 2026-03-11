@@ -126,3 +126,70 @@ ab -n 10000 -c 100 http://81.90.182.174:8080/api/products
 wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
 wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/health
 ```
+
+### Результат (gunicorn, 3 воркера, PostgreSQL):
+
+```
+wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
+
+  4 threads and 200 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.06s   560.98ms   1.99s    60.63%
+    Req/Sec    17.51     11.34    60.00     59.31%
+  1658 requests in 33.11s, 2.54MB read
+  Socket errors: connect 0, read 0, write 0, timeout 1531
+Requests/sec:     50.08
+Transfer/sec:     78.45KB
+```
+
+**Проблемы:**
+- **50 req/s** — мало, 1531 таймаут из 1658 запросов
+- 3 синхронных воркера Gunicorn не справляются с 200 соединениями
+- Нет пула соединений к PostgreSQL — каждый запрос открывает новое подключение
+
+---
+
+## Оптимизация
+
+### 1. Увеличить воркеры и переключить на uvicorn (асинхронный режим)
+
+В `docker-compose.prod.yml` заменить command:
+```yaml
+command: >
+  sh -c "python manage.py migrate &&
+         python load_data.py &&
+         uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 4"
+```
+
+Django Ninja нативно поддерживает async — uvicorn обрабатывает множество соединений в одном процессе без блокировки.
+
+### 2. Добавить пул соединений к PostgreSQL
+
+Установить `django-pgconnpool` или использовать встроенный `CONN_MAX_AGE` в `settings.py`:
+
+```python
+DATABASES = {
+    'default': {
+        ...
+        'CONN_MAX_AGE': 600,  # держать соединение 10 минут
+    }
+}
+```
+
+Или через `dj-database-url`:
+```python
+DATABASES = {
+    'default': dj_database_url.config(
+        default='postgresql://postgres:postgres@localhost:5432/shop',
+        conn_max_age=600,
+    )
+}
+```
+
+### 3. Ожидаемый результат
+
+| Метрика        | До        | После (ожидание) |
+|---------------|-----------|-------------------|
+| Req/sec       | 50        | 250–500+          |
+| Avg Latency   | 1.06s     | 100–400ms         |
+| Timeouts      | 1531      | 0                 |
