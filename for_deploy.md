@@ -127,7 +127,7 @@ wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
 wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/health
 ```
 
-### Результат (gunicorn, 3 воркера, PostgreSQL):
+### Результат wrk (gunicorn, 3 воркера, PostgreSQL):
 
 ```
 wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
@@ -140,6 +140,28 @@ wrk -t4 -c200 -d30s http://81.90.182.174:8080/api/products
   Socket errors: connect 0, read 0, write 0, timeout 1531
 Requests/sec:     50.08
 Transfer/sec:     78.45KB
+```
+
+### Результат ab (gunicorn, 3 воркера, PostgreSQL):
+
+```
+ab -n 10000 -c 100 http://81.90.182.174:8080/api/products
+
+Server Software:        gunicorn
+Concurrency Level:      100
+Time taken for tests:   301.733 seconds
+Complete requests:      10000
+Failed requests:        0
+Requests per second:    33.14 [#/sec] (mean)
+Time per request:       3017.333 [ms] (mean)
+
+  50%   2084
+  66%   2359
+  75%   3217
+  90%   5224
+  95%   7192
+  99%  13388
+ 100%  17572 (longest request)
 ```
 
 **Проблемы:**
